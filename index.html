@@ -1,26 +1,84 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b1022" />
-    <meta name="description" content="Hollow Orbit — restore an abandoned space station." />
-    <title>Hollow Orbit · Prototype 0.2</title>
-    <link rel="stylesheet" href="style.css" />
-    <script src="game.js" defer></script>
-  </head>
-  <body>
-    <main class="game-shell">
-      <header class="topbar">
-        <div class="brand"><span class="brand-icon" aria-hidden="true">✦</span><div><span class="eyebrow">STATION RESTORATION PROTOCOL</span><h1>HOLLOW ORBIT <span class="version">0.2</span></h1></div></div>
-        <div class="top-actions"><div class="resource" aria-label="Scrap collected"><span class="resource-icon">⬡</span><span id="scrapCount">0</span><small>SCRAP</small></div><button class="reset-button" id="resetButton" type="button">Restart</button></div>
-      </header>
-      <section class="viewport" aria-label="Isometric view of an abandoned space station">
-        <canvas id="game" aria-label="Space station game. Tap a floor tile to move your engineer. Tap debris and the reactor to approach and interact." role="img"></canvas>
-        <div class="mission-panel"><div class="eyebrow">CURRENT OBJECTIVE</div><div id="objective" class="mission-title">Salvage three debris piles</div><div id="progress" class="mission-progress">0 / 3 debris cleared</div></div>
-        <div class="hint">TAP TO WALK · TAP DEBRIS TO SALVAGE</div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#080f1f" />
+  <meta name="description" content="Hollow Orbit — reclaim a derelict station one repair at a time." />
+  <title>Hollow Orbit · Station Operations 0.2.1</title>
+  <link rel="stylesheet" href="style.css?v=021" />
+  <script src="game.js?v=021" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div class="identity">
+        <div class="identity-mark" aria-hidden="true">✦</div>
+        <div>
+          <div class="eyebrow">SECTOR 07 / RESTORATION PROTOCOL</div>
+          <h1>HOLLOW <span>ORBIT</span> <small>ALPHA 0.2.1</small></h1>
+        </div>
+      </div>
+      <div class="header-tools">
+        <div class="stat-chip" aria-label="Available scrap">
+          <span class="stat-symbol" aria-hidden="true">⬡</span>
+          <div><span class="stat-label">SCRAP</span><strong id="scrapCount">0</strong></div>
+        </div>
+        <div class="stat-chip power-chip" aria-label="Station power status">
+          <span class="power-orb" id="headerPowerLed" aria-hidden="true"></span>
+          <div><span class="stat-label">REACTOR</span><strong id="powerReadout">OFFLINE</strong></div>
+        </div>
+        <button id="resetButton" class="reset-button" type="button" title="Start a new salvage run">↺ <span>Restart</span></button>
+      </div>
+    </header>
+
+    <div class="workbench">
+      <section class="scene-column" aria-label="Station deck">
+        <div class="scene-header">
+          <div><span class="status-pip"></span><strong>STATION DECK</strong><span class="scene-subtitle"> / LOWER SERVICE RING</span></div>
+          <span class="scene-build">LIVE FEED <span aria-hidden="true">●</span></span>
+        </div>
+        <div class="viewport">
+          <canvas id="game" aria-label="Interactive station deck. Tap the floor to walk your engineer. Tap debris, the reactor or the terminal to interact." tabindex="0"></canvas>
+          <div class="scene-corner" aria-hidden="true"><span>CAM 01</span><span>ISO / TACTICAL</span></div>
+          <div class="scene-hint" id="controlHint">TAP A FLOOR TILE TO MOVE · TAP DEBRIS TO SALVAGE</div>
+        </div>
+        <div class="scene-footer">
+          <div class="status-line"><span class="status-led" id="statusLed"></span><span id="stationStatus">Station systems offline</span></div>
+          <div class="message-line"><span class="message-symbol" aria-hidden="true">✦</span><span id="message" role="status" aria-live="polite">Welcome aboard. Select a glowing debris pile to begin.</span></div>
+        </div>
       </section>
-      <footer class="bottom-bar"><div><span class="status-led" id="statusLed"></span><span id="stationStatus">Station systems offline</span></div><div class="message" id="message" role="status" aria-live="polite">You have docked with an abandoned station. Begin salvaging.</div></footer>
-    </main>
-  </body>
+
+      <aside class="dashboard" aria-label="Station operations dashboard">
+        <section class="panel mission-panel">
+          <div class="panel-kicker"><span>ACTIVE OBJECTIVE</span><span class="mission-number">01 / RESTORE POWER</span></div>
+          <h2 id="objective">Salvage the service deck</h2>
+          <p class="panel-description" id="progress">0 of 3 debris piles cleared</p>
+          <div class="progress-track" role="progressbar" aria-label="Mission progress" aria-valuemin="0" aria-valuemax="4" aria-valuenow="0" id="missionBar"><span id="progressFill"></span></div>
+          <div class="mission-steps">
+            <div id="salvageStep" class="mission-step"><span class="step-mark" aria-hidden="true">1</span><div><strong>Recover scrap</strong><small id="salvageDetail">Clear the 3 glowing debris piles</small></div></div>
+            <div id="reactorStep" class="mission-step"><span class="step-mark" aria-hidden="true">2</span><div><strong>Restart the reactor</strong><small>Approach and spend 6 scrap</small></div></div>
+          </div>
+        </section>
+
+        <section class="panel inspector-panel" aria-live="polite">
+          <div class="panel-kicker"><span>CONTEXT / SELECTED TARGET</span><span id="targetKind" class="context-chip">CREW</span></div>
+          <h2 id="targetTitle">Your engineer</h2>
+          <p id="targetDescription" class="panel-description">The station's first crew member. Tap the deck to walk, or tap an object to approach and interact.</p>
+          <div id="targetMeta" class="target-meta">STATUS · READY</div>
+          <button id="actionButton" class="action-button" type="button">Find engineer</button>
+        </section>
+
+        <section class="panel systems-panel">
+          <div class="panel-kicker"><span>STATION SYSTEMS</span><span>STATUS</span></div>
+          <div class="system-row"><span><i class="system-icon reactor-icon" aria-hidden="true">◈</i> Core reactor</span><strong id="coreState" class="system-state critical">OFFLINE</strong></div>
+          <div class="system-row"><span><i class="system-icon" aria-hidden="true">◇</i> Maintenance drones</span><span class="system-state dormant">LOCKED</span></div>
+          <div class="system-row"><span><i class="system-icon" aria-hidden="true">✧</i> Expedition hangar</span><span class="system-state dormant">LOCKED</span></div>
+        </section>
+
+        <div class="footnote"><span class="tiny-signal" aria-hidden="true">◉</span> ALL PROGRESS SAVED LOCALLY ON THIS DEVICE</div>
+      </aside>
+    </div>
+  </main>
+</body>
 </html>
