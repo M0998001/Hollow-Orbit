@@ -324,21 +324,43 @@
     ctx.save();ctx.shadowBlur=16;ctx.shadowColor='#f8ca83';ellipse(x+20,y-23,spark,spark,'#ffe2a3');ctx.restore();
     ctx.font='bold 10px system-ui';ctx.fillStyle='#f9d29a';ctx.textAlign='center';ctx.fillText('+2 SCRAP',x,y-37);ctx.textAlign='left';
   }
+  // Large, high-contrast player silhouette and a persistent YOU marker.
+  // Previously the tiny figure could disappear against the deck on iPhones.
   function drawAstronaut(t) {
-    const {x,y} = stationPos(engineer.x, engineer.y);
+    const p = stationPos(engineer.x,engineer.y);
     const walking = engineer.path.length > 0;
-    const bob = walking ? Math.sin(t * 0.022) * 2 : Math.sin(t * 0.0025) * 1.2;
-    const leg = walking ? Math.sin(t * 0.022) * 4 : 0;
-    ellipse(x,y+9,15,6,'#030b1d99');
-    poly([[x-9,y-18+bob],[x+9,y-18+bob],[x+11,y+5+bob],[x-11,y+5+bob]],'#d1dce9','#8eaac4',1.5);
-    line(x-5,y+1+bob,x-5+leg,y+12+bob,'#d7e9f4',4);
-    line(x+5,y+1+bob,x+5-leg,y+12+bob,'#d7e9f4',4);
-    poly([[x-14,y-17+bob],[x-8,y-14+bob],[x-8,y-1+bob],[x-14,y-5+bob]],'#7c9bb9');
-    ellipse(x,y-25+bob,14,15,'#e4e8ea');
-    ellipse(x+engineer.facing*2,y-27+bob,10,9,'#335d7b');
-    ellipse(x+engineer.facing*5,y-30+bob,3,2,'#a5e6eb');
-    ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillStyle='#bed2e7';
-    ctx.fillText('ENGINEER',x,y-48);ctx.textAlign='left';
+    const bob = walking ? Math.sin(t * .02)*1.8 : Math.sin(t * .0025);
+    const leg = walking ? Math.sin(t * .02)*4 : 0;
+    const focused = lastFrame < markerUntil;
+    ctx.save();
+    ctx.translate(p.x,p.y);
+    ctx.scale(1.48,1.48);
+
+    // A ring marking the occupied tile, visible even against dark floors.
+    ctx.save();
+    ctx.shadowColor = '#6affde'; ctx.shadowBlur = focused ? 25 : 12;
+    ellipse(0,8,23,10,focused?'#70ffe477':'#64f1d63d');
+    ctx.restore();
+    ctx.beginPath();ctx.ellipse(0,9,21,9,0,0,Math.PI*2);
+    ctx.strokeStyle='#7cfbe0';ctx.lineWidth=1.4;ctx.stroke();
+
+    ellipse(0,9,13,5,'#03101acc');
+    line(-5,1+bob,-5+leg,12+bob,'#d5ecf8',5);
+    line(5,1+bob,5-leg,12+bob,'#d5ecf8',5);
+    poly([[-10,-18+bob],[10,-18+bob],[11,4+bob],[-11,4+bob]],'#dcecf6','#83b7ca',1.8);
+    poly([[-15,-17+bob],[-9,-14+bob],[-9,-2+bob],[-15,-4+bob]],'#7c9bb9','#bce3e9');
+    ellipse(0,-25+bob,14,15,'#f2fbff');
+    ellipse(engineer.facing*2,-26+bob,10,9,'#234c70');
+    ellipse(engineer.facing*5,-29+bob,3,2,'#b2ffff');
+    // The yellow shoulder light differentiates the character from a prop.
+    ellipse(-11,-15+bob,2.5,2.5,'#ffd47d');
+
+    ctx.fillStyle='#0a2736ee';ctx.fillRect(-34,-70,68,16);
+    ctx.strokeStyle='#47adad';ctx.lineWidth=.8;ctx.strokeRect(-34,-70,68,16);
+    ctx.font='bold 9px system-ui';ctx.textAlign='center';ctx.fillStyle='#befff0';
+    ctx.fillText('▼  YOU',0,-58);
+    ctx.textAlign='left';
+    ctx.restore();
   }
   function drawRoute(t) {
     if (!engineer.path.length) return;
@@ -353,14 +375,33 @@
     const size=13+2*Math.sin(t*.008);
     ellipse(goal.x,goal.y+3,size,size*.45,'#79ffdc55');
   }
+  function updateCamera() {
+    const bounds=canvas.getBoundingClientRect();
+    const small=bounds.width<=760;
+    if(small) {
+      // On phones, zoom toward the engineer instead of shrinking the entire
+      // station to a postage stamp. Keep the character near the viewport centre.
+      const scale=Math.min(canvas.width/770,canvas.height/525);
+      const centre=stationPos(engineer.x,engineer.y);
+      layout={scale,x:canvas.width*.5-centre.x*scale,y:canvas.height*.52-centre.y*scale};
+    } else {
+      const scale=Math.min(canvas.width/W,canvas.height/H);
+      layout={scale,x:(canvas.width-W*scale)/2,y:(canvas.height-H*scale)/2};
+    }
+  }
   function render(t) {
     const dt = lastFrame ? Math.max(0, (t - lastFrame) / 1000) : 0;
     lastFrame = t;
     updateMovement(dt);
-    const { scale, x, y }=layout;
+    updateCamera();
     ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);
+    // Keep the star field full frame while the station camera pans on mobile.
+    const bg=backgroundLayout;
+    ctx.setTransform(bg.scale,0,0,bg.scale,bg.x,bg.y);
+    drawBackground(t);
+    const { scale, x, y }=layout;
     ctx.setTransform(scale,0,0,scale,x,y);
-    drawBackground(t);drawDeck();drawRoute(t);
+    drawDeck();drawRoute(t);
     const terminalPos=stationPos(0,5);
     const objects = [
       { depth: 5, draw: () => drawTerminal(terminalPos.x,terminalPos.y) },
@@ -373,10 +414,13 @@
     requestAnimationFrame(render);
   }
   function resize() {
-    const bounds=canvas.getBoundingClientRect();const dpr=Math.min(window.devicePixelRatio||1,2);
-    canvas.width=Math.round(bounds.width*dpr);canvas.height=Math.round(bounds.height*dpr);
-    const scale=Math.min(canvas.width/W,canvas.height/H);
-    layout={scale,x:(canvas.width-W*scale)/2,y:(canvas.height-H*scale)/2};
+    const bounds=canvas.getBoundingClientRect();
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    canvas.width=Math.max(1,Math.round(bounds.width*dpr));
+    canvas.height=Math.max(1,Math.round(bounds.height*dpr));
+    const scale=Math.max(canvas.width/W,canvas.height/H);
+    backgroundLayout={scale,x:(canvas.width-W*scale)/2,y:(canvas.height-H*scale)/2};
+    updateCamera();
   }
   function selectTile(px,py) {
     for(let row=0;row<ROWS;row++)for(let col=0;col<COLS;col++){
