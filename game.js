@@ -1,4 +1,4 @@
-// Hollow Orbit • Milestone 01: salvage and restore the reactor.
+// Hollow Orbit • Milestone 02: touch movement, pathfinding, and proximity interactions.
 // No libraries or build step needed. GitHub Pages can serve these files directly.
 (function hollowOrbitGame() {
   'use strict';
@@ -22,18 +22,140 @@
     { id: 'c', col: 5, row: 5 },
   ];
   const reactor = { col: 3, row: 3 };
-  const initialState = () => ({ scrap: 0, cleared: [], powered: false });
+  const SPAWN = { col: 2, row: 5 };
+  const initialState = () => ({ scrap: 0, cleared: [], powered: false, engineer: { ...SPAWN } });
+  function inside(col, row) { return Number.isInteger(col) && Number.isInteger(row) && col >= 0 && row >= 0 && col < COLS && row < ROWS; }
+  function passable(col, row, save) {
+    return inside(col, row) &&
+      !(col === reactor.col && row === reactor.row) &&
+      !(col === 0 && row === 5) &&
+      !debris.some(d => d.col === col && d.row === row && !save.cleared.includes(d.id));
+  }
   function load() {
     try {
       const saved = JSON.parse(localStorage.getItem(SAVE_KEY));
       if (saved && Number.isInteger(saved.scrap) && Array.isArray(saved.cleared) && typeof saved.powered === 'boolean') {
-        return { scrap: Math.max(0, saved.scrap), cleared: saved.cleared.filter(id => debris.some(d => d.id === id)), powered: saved.powered };
+        const progress = {
+          scrap: Math.max(0, saved.scrap),
+          cleared: [...new Set(saved.cleared.filter(id => debris.some(d => d.id === id)))],
+          powered: saved.powered,
+          engineer: { ...SPAWN },
+        };
+        if (saved.engineer && passable(saved.engineer.col, saved.engineer.row, progress)) {
+          progress.engineer = { col: saved.engineer.col, row: saved.engineer.row };
+        }
+        return progress;
       }
-    } catch (_) { /* Browsers may block storage; the game still works. */ }
+    } catch (_) { /* Storage may be unavailable: play without persistence. */ }
     return initialState();
   }
   let state = load();
+  const engineer = {
+    col: state.engineer.col, row: state.engineer.row,
+    x: state.engineer.col, y: state.engineer.row,
+    path: [], pending: null, facing: 1,
+  };
   let layout = { scale: 1, x: 0, y: 0 };
+  let lastFrame = 0;
+
+  // Movement is deliberately grid-based so later crew and enemies can reuse it.
+  function neighbors(tile) {
+    return [{col:tile.col+1,row:tile.row},{col:tile.col-1,row:tile.row},
+      {col:tile.col,row:tile.row+1},{col:tile.col,row:tile.row-1}]
+      .filter(t => passable(t.col, t.row, state));
+  }
+  function pathfind(start, goal) {
+    if (!passable(goal.col, goal.row, state)) return null;
+    const key = t => t.col + ',' + t.row;
+    const queue = [start], cameFrom = new Map([[key(start), null]]);
+    for (let i = 0; i < queue.length; i++) {
+      const tile = queue[i];
+      if (tile.col === goal.col && tile.row === goal.row) {
+        const path = [];
+        for (let cursor = tile; cursor; cursor = cameFrom.get(key(cursor))) path.push(cursor);
+        return path.reverse();
+      }
+      for (const next of neighbors(tile)) {
+        if (!cameFrom.has(key(next))) {
+          cameFrom.set(key(next), tile);
+          queue.push(next);
+        }
+      }
+    }
+    return null;
+  }
+  function anchorTile() {
+    // Replanning mid-step finishes the current tile, avoiding visual teleportation.
+    return engineer.path.length ? engineer.path[0] : { col: engineer.col, row: engineer.row };
+  }
+  function planMove(destination, action = null) {
+    const start = anchorTile();
+    const route = pathfind(start, destination);
+    if (!route) return false;
+    const remainingStep = engineer.path.length ? [start] : [];
+    engineer.path = remainingStep.concat(route.slice(1));
+    engineer.pending = action;
+    if (!engineer.path.length) finishAction();
+    return true;
+  }
+  function planInteraction(kind, tile, id = null) {
+    const start = anchorTile();
+    const candidates = [
+      { col:tile.col+1, row:tile.row }, { col:tile.col-1, row:tile.row },
+      { col:tile.col, row:tile.row+1 }, { col:tile.col, row:tile.row-1 },
+    ];
+    let best = null;
+    for (const spot of candidates) {
+      const route = pathfind(start, spot);
+      if (route && (!best || route.length < best.route.length)) best = { spot, route };
+    }
+    if (!best) { notify('No accessible path to that object.'); return; }
+    const action = { kind, col: tile.col, row: tile.row, id };
+    planMove(best.spot, action);
+    if (engineer.path.length) notify('Engineer moving to ' + (kind === 'salvage' ? 'the salvage pile.' : kind === 'reactor' ? 'the reactor.' : 'the terminal.'));
+  }
+  function finishAction() {
+    const action = engineer.pending;
+    engineer.pending = null;
+    if (!action) return;
+    if (Math.abs(engineer.col - action.col) + Math.abs(engineer.row - action.row) !== 1) return;
+    if (action.kind === 'salvage') {
+      if (state.cleared.includes(action.id)) return;
+      state.cleared.push(action.id);
+      state.scrap += 2;
+      persist(); updateUI(); notify('Salvage recovered: +2 scrap.');
+    } else if (action.kind === 'reactor') {
+      if (state.powered) notify('The reactor is already online.');
+      else if (state.scrap >= 6) {
+        state.scrap -= 6; state.powered = true;
+        persist(); updateUI(); notify('REACTOR ONLINE! Emergency power restored.');
+      } else notify('Reactor needs 6 scrap. Missing ' + (6 - state.scrap) + '.');
+    } else if (action.kind === 'terminal') {
+      notify(state.powered ? 'Terminal connected. More station rooms coming soon.' : 'Terminal offline. Restore the reactor first.');
+    }
+  }
+  function updateMovement(dt) {
+    let distanceLeft = Math.min(dt, 0.05) * 3.1; // Tiles per second, frame-rate independent.
+    while (distanceLeft > 0 && engineer.path.length) {
+      const next = engineer.path[0];
+      const dx = next.col - engineer.x, dy = next.row - engineer.y;
+      const remaining = Math.hypot(dx, dy);
+      const projectedDx = (dx - dy) * TW / 2;
+      if (Math.abs(projectedDx) > 0.01) engineer.facing = projectedDx > 0 ? 1 : -1;
+      if (remaining <= distanceLeft + 0.00001) {
+        engineer.x = next.col; engineer.y = next.row;
+        engineer.col = next.col; engineer.row = next.row;
+        engineer.path.shift(); distanceLeft -= remaining;
+        state.engineer = { col: engineer.col, row: engineer.row };
+        persist();
+      } else {
+        engineer.x += dx / remaining * distanceLeft;
+        engineer.y += dy / remaining * distanceLeft;
+        distanceLeft = 0;
+      }
+    }
+    if (!engineer.path.length && engineer.pending) finishAction();
+  }
   function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (_) {} }
   function notify(message) { ui.message.textContent = message; }
   function updateUI() {
@@ -42,8 +164,8 @@
     ui.led.classList.toggle('on', state.powered);
     ui.status.textContent = state.powered ? 'Emergency power restored' : 'Station systems offline';
     ui.objective.textContent = state.powered ? 'Reactor online!' : count < 3 ? 'Salvage three debris piles' : 'Restore the central reactor';
-    ui.progress.textContent = state.powered ? 'Milestone 01 complete' : count < 3 ? `${count} / 3 debris cleared` : `Reactor repair costs 6 scrap · You have ${state.scrap}`;
-    ui.hint.textContent = state.powered ? 'STATION RESTORED · MORE ROOMS COMING NEXT' : count < 3 ? 'TAP THE GLOWING DEBRIS TO COLLECT SCRAP' : 'TAP THE RED REACTOR TO REPAIR IT';
+    ui.progress.textContent = state.powered ? 'Milestone 02 complete · Explore the deck!' : count < 3 ? `${count} / 3 debris cleared` : `Reactor repair costs 6 scrap · You have ${state.scrap}`;
+    ui.hint.textContent = state.powered ? 'TAP ANY OPEN TILE TO WALK AROUND' : count < 3 ? 'TAP TO WALK · TAP DEBRIS TO SALVAGE' : 'TAP THE REACTOR TO WALK OVER AND REPAIR';
   }
   function stationPos(col, row) { return { x: OX + (col - row) * TW / 2, y: OY + (col + row) * TH / 2 }; }
   function poly(points, fill, stroke, width = 1) {
@@ -117,22 +239,51 @@
     ctx.font='bold 10px system-ui';ctx.fillStyle='#f9d29a';ctx.textAlign='center';ctx.fillText('+2 SCRAP',x,y-37);ctx.textAlign='left';
   }
   function drawAstronaut(t) {
-    const {x,y}=stationPos(2,5);const bob=Math.sin(t*.0025)*1.2;
+    const {x,y} = stationPos(engineer.x, engineer.y);
+    const walking = engineer.path.length > 0;
+    const bob = walking ? Math.sin(t * 0.022) * 2 : Math.sin(t * 0.0025) * 1.2;
+    const leg = walking ? Math.sin(t * 0.022) * 4 : 0;
     ellipse(x,y+9,15,6,'#030b1d99');
     poly([[x-9,y-18+bob],[x+9,y-18+bob],[x+11,y+5+bob],[x-11,y+5+bob]],'#d1dce9','#8eaac4',1.5);
+    line(x-5,y+1+bob,x-5+leg,y+12+bob,'#d7e9f4',4);
+    line(x+5,y+1+bob,x+5-leg,y+12+bob,'#d7e9f4',4);
     poly([[x-14,y-17+bob],[x-8,y-14+bob],[x-8,y-1+bob],[x-14,y-5+bob]],'#7c9bb9');
-    ellipse(x,y-25+bob,14,15,'#e4e8ea');ellipse(x,y-27+bob,10,9,'#335d7b');ellipse(x+3,y-30+bob,3,2,'#a5e6eb');
-    ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillStyle='#bed2e7';ctx.fillText('ENGINEER',x,y-47);ctx.textAlign='left';
+    ellipse(x,y-25+bob,14,15,'#e4e8ea');
+    ellipse(x+engineer.facing*2,y-27+bob,10,9,'#335d7b');
+    ellipse(x+engineer.facing*5,y-30+bob,3,2,'#a5e6eb');
+    ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillStyle='#bed2e7';
+    ctx.fillText('ENGINEER',x,y-48);ctx.textAlign='left';
+  }
+  function drawRoute(t) {
+    if (!engineer.path.length) return;
+    const nodes = [{ col: engineer.x, row: engineer.y }, ...engineer.path];
+    ctx.beginPath();
+    for (let i = 0; i < nodes.length; i++) {
+      const p = stationPos(nodes[i].col, nodes[i].row);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    }
+    ctx.setLineDash([5, 8]);ctx.lineWidth=2;ctx.strokeStyle='#8bf3dfbb';ctx.stroke();ctx.setLineDash([]);
+    const goal = stationPos(nodes[nodes.length-1].col, nodes[nodes.length-1].row);
+    const size=13+2*Math.sin(t*.008);
+    ellipse(goal.x,goal.y+3,size,size*.45,'#79ffdc55');
   }
   function render(t) {
+    const dt = lastFrame ? Math.max(0, (t - lastFrame) / 1000) : 0;
+    lastFrame = t;
+    updateMovement(dt);
     const { scale, x, y }=layout;
     ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.setTransform(scale,0,0,scale,x,y);
-    drawBackground(t);drawDeck();
-    const pos=stationPos(0,5);drawTerminal(pos.x,pos.y);
-    drawReactor(t);
-    for(const d of debris)drawDebris(d,t);
-    drawAstronaut(t);
+    drawBackground(t);drawDeck();drawRoute(t);
+    const terminalPos=stationPos(0,5);
+    const objects = [
+      { depth: 5, draw: () => drawTerminal(terminalPos.x,terminalPos.y) },
+      { depth: reactor.col+reactor.row, draw: () => drawReactor(t) },
+      ...debris.map(d => ({ depth:d.col+d.row, draw: () => drawDebris(d,t) })),
+      { depth: engineer.x+engineer.y+0.01, draw: () => drawAstronaut(t) },
+    ];
+    objects.sort((a,b)=>a.depth-b.depth);
+    for (const object of objects) object.draw();
     requestAnimationFrame(render);
   }
   function resize() {
@@ -149,22 +300,38 @@
     return null;
   }
   function onPointer(e) {
+    if (e.cancelable) e.preventDefault();
     const rect=canvas.getBoundingClientRect();
     const px=((e.clientX-rect.left)*canvas.width/rect.width-layout.x)/layout.scale;
     const py=((e.clientY-rect.top)*canvas.height/rect.height-layout.y)/layout.scale;
-    const target=debris.find(d=>!state.cleared.includes(d.id)&&(()=>{const p=stationPos(d.col,d.row);return Math.abs(px-p.x)<33&&py>p.y-45&&py<p.y+20;})());
-    if(target){state.cleared.push(target.id);state.scrap+=2;persist();updateUI();notify('Salvaged debris. +2 scrap recovered.');return;}
+    const hitDebris=debris.find(d=>!state.cleared.includes(d.id)&&(()=>{
+      const p=stationPos(d.col,d.row);
+      return Math.abs(px-p.x)<33 && py>p.y-45 && py<p.y+20;
+    })());
+    if (hitDebris) { planInteraction('salvage',hitDebris,hitDebris.id); return; }
     const rp=stationPos(reactor.col,reactor.row);
-    if(Math.abs(px-rp.x)<39&&py>rp.y-62&&py<rp.y+24){
-      if(state.powered)notify('Reactor operating normally. The station is alive again.');
-      else if(state.scrap>=6){state.scrap-=6;state.powered=true;persist();updateUI();notify('REACTOR ONLINE! Emergency power restored.');}
-      else notify(`Reactor requires 6 scrap. Collect ${6-state.scrap} more.`);
-      return;
+    if(Math.abs(px-rp.x)<39&&py>rp.y-62&&py<rp.y+24) {
+      planInteraction('reactor',reactor);return;
     }
-    if(selectTile(px,py))notify('Damaged station deck. Look for glowing scrap piles.');
+    const tp=stationPos(0,5);
+    if(Math.abs(px-tp.x)<25&&py>tp.y-35&&py<tp.y+12) {
+      planInteraction('terminal',{col:0,row:5});return;
+    }
+    const tile=selectTile(px,py);
+    if(!tile)return;
+    const onDebris=debris.find(d=>d.col===tile.col&&d.row===tile.row&&!state.cleared.includes(d.id));
+    if(onDebris){planInteraction('salvage',onDebris,onDebris.id);return;}
+    if(tile.col===reactor.col&&tile.row===reactor.row){planInteraction('reactor',reactor);return;}
+    if(tile.col===0&&tile.row===5){planInteraction('terminal',tile);return;}
+    if(planMove(tile))notify(engineer.path.length?'Moving across the station.':'Engineer is already here.');
+    else notify('That location cannot be reached.');
   }
   document.querySelector('#resetButton').addEventListener('click',()=>{
-    state=initialState();persist();updateUI();notify('New salvage run started.');
+    state=initialState();
+    engineer.col=SPAWN.col;engineer.row=SPAWN.row;
+    engineer.x=SPAWN.col;engineer.y=SPAWN.row;
+    engineer.path=[];engineer.pending=null;engineer.facing=1;
+    persist();updateUI();notify('New salvage run started.');
   });
   canvas.addEventListener('pointerdown',onPointer);
   window.addEventListener('resize',resize);
