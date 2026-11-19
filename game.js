@@ -11,7 +11,20 @@
     status: document.querySelector('#stationStatus'),
     led: document.querySelector('#statusLed'),
     message: document.querySelector('#message'),
-    hint: document.querySelector('.hint'),
+    hint: document.querySelector('#controlHint'),
+    powerReadout: document.querySelector('#powerReadout'),
+    powerLed: document.querySelector('#headerPowerLed'),
+    core: document.querySelector('#coreState'),
+    bar: document.querySelector('#missionBar'),
+    fill: document.querySelector('#progressFill'),
+    salvageStep: document.querySelector('#salvageStep'),
+    reactorStep: document.querySelector('#reactorStep'),
+    salvageDetail: document.querySelector('#salvageDetail'),
+    targetKind: document.querySelector('#targetKind'),
+    targetTitle: document.querySelector('#targetTitle'),
+    targetDescription: document.querySelector('#targetDescription'),
+    targetMeta: document.querySelector('#targetMeta'),
+    action: document.querySelector('#actionButton'),
   };
   const SAVE_KEY = 'hollow-orbit-save-v1';
   const W = 1000, H = 560, COLS = 7, ROWS = 7;
@@ -56,7 +69,64 @@
     path: [], pending: null, facing: 1,
   };
   let layout = { scale: 1, x: 0, y: 0 };
+  let backgroundLayout = { scale: 1, x: 0, y: 0 };
   let lastFrame = 0;
+  let markerUntil = 0;
+  let selection = { kind: 'crew' };
+
+  // A contextual inspector gives each tap a meaningful action and explanation.
+  function setSelection(kind, tile = null, id = null) {
+    selection = { kind, tile, id };
+    updateInspector();
+  }
+  function updateInspector() {
+    const sel = selection;
+    const view = {
+      kind: 'CREW', title: 'Your engineer',
+      description: 'Tap the deck to move. Select debris or machinery to walk over and interact.',
+      meta: 'CREW STATUS · READY', action: 'Locate engineer', disabled: false,
+    };
+    if (sel.kind === 'floor' && sel.tile) {
+      Object.assign(view, {
+        kind:'DECK', title:'Service deck',
+        description:'This tile is part of the station floor. Your engineer can walk here.',
+        meta:'COORDINATES · ' + (sel.tile.col + 1) + ' / ' + (sel.tile.row + 1),
+        action:'Walk to this tile',
+      });
+    } else if (sel.kind === 'salvage') {
+      const recovered = state.cleared.includes(sel.id);
+      Object.assign(view, {
+        kind:'SALVAGE', title:recovered ? 'Debris cleared' : 'Scattered debris',
+        description:recovered ? 'Materials recovered. This section of deck is now clear.' : 'An obstructed service tile. Send your engineer to salvage 2 scrap.',
+        meta:recovered ? 'STATUS · RECOVERED' : 'REWARD · +2 SCRAP',
+        action:recovered ? 'Salvage complete' : 'Approach & salvage',
+        disabled:recovered,
+      });
+    } else if (sel.kind === 'reactor') {
+      Object.assign(view, {
+        kind:'SYSTEM', title:state.powered ? 'Reactor online' : 'Damaged core reactor',
+        description:state.powered
+          ? 'Emergency power has been restored. More station systems can be unlocked next.'
+          : 'The reactor is offline. Repairing it requires 6 scrap. Your engineer must reach it first.',
+        meta:state.powered ? 'STATUS · STABLE' : 'REPAIR COST · 6 SCRAP',
+        action:state.powered ? 'Reactor restored' : 'Approach & repair',
+        disabled:state.powered,
+      });
+    } else if (sel.kind === 'terminal') {
+      Object.assign(view, {
+        kind:'SYSTEM', title:'Service terminal',
+        description:'A damaged control terminal near the docking corridor. Restore power to access it.',
+        meta:state.powered ? 'POWER · AVAILABLE' : 'POWER · REQUIRED',
+        action:'Inspect terminal',
+      });
+    }
+    ui.targetKind.textContent=view.kind;
+    ui.targetTitle.textContent=view.title;
+    ui.targetDescription.textContent=view.description;
+    ui.targetMeta.textContent=view.meta;
+    ui.action.textContent=view.action;
+    ui.action.disabled=Boolean(view.disabled);
+  }
 
   // Movement is deliberately grid-based so later crew and enemies can reuse it.
   function neighbors(tile) {
@@ -160,12 +230,28 @@
   function notify(message) { ui.message.textContent = message; }
   function updateUI() {
     const count = state.cleared.length;
+    const progress = count + (state.powered ? 1 : 0);
     ui.scrap.textContent = String(state.scrap);
     ui.led.classList.toggle('on', state.powered);
+    ui.powerLed.classList.toggle('online', state.powered);
+    ui.powerReadout.classList.toggle('online', state.powered);
+    ui.powerReadout.textContent = state.powered ? 'ONLINE' : 'OFFLINE';
+    ui.core.textContent = state.powered ? 'ONLINE' : 'OFFLINE';
+    ui.core.classList.toggle('online', state.powered);
+    ui.core.classList.toggle('critical', !state.powered);
     ui.status.textContent = state.powered ? 'Emergency power restored' : 'Station systems offline';
-    ui.objective.textContent = state.powered ? 'Reactor online!' : count < 3 ? 'Salvage three debris piles' : 'Restore the central reactor';
-    ui.progress.textContent = state.powered ? 'Milestone 02 complete · Explore the deck!' : count < 3 ? `${count} / 3 debris cleared` : `Reactor repair costs 6 scrap · You have ${state.scrap}`;
-    ui.hint.textContent = state.powered ? 'TAP ANY OPEN TILE TO WALK AROUND' : count < 3 ? 'TAP TO WALK · TAP DEBRIS TO SALVAGE' : 'TAP THE REACTOR TO WALK OVER AND REPAIR';
+    ui.objective.textContent = state.powered ? 'Station power restored' : count < 3 ? 'Salvage the service deck' : 'Restore the core reactor';
+    ui.progress.textContent = state.powered ? 'Mission complete · Ready for expansion' : count < 3
+      ? count + ' of 3 debris piles cleared' : 'Spend 6 scrap to repair the reactor';
+    ui.fill.style.width = (progress / 4 * 100) + '%';
+    ui.bar.setAttribute('aria-valuenow', String(progress));
+    ui.salvageDetail.textContent = count + ' / 3 debris piles cleared';
+    ui.salvageStep.classList.toggle('complete', count === 3);
+    ui.reactorStep.classList.toggle('complete', state.powered);
+    ui.hint.textContent = state.powered ? 'TAP FLOOR TILES TO EXPLORE THE STATION'
+      : count < 3 ? 'TAP FLOOR TO WALK · TAP DEBRIS TO SALVAGE'
+      : 'TAP THE REACTOR TO APPROACH & REPAIR';
+    updateInspector();
   }
   function stationPos(col, row) { return { x: OX + (col - row) * TW / 2, y: OY + (col + row) * TH / 2 }; }
   function poly(points, fill, stroke, width = 1) {
@@ -308,32 +394,60 @@
       const p=stationPos(d.col,d.row);
       return Math.abs(px-p.x)<33 && py>p.y-45 && py<p.y+20;
     })());
-    if (hitDebris) { planInteraction('salvage',hitDebris,hitDebris.id); return; }
+    if (hitDebris) { setSelection('salvage', hitDebris, hitDebris.id); planInteraction('salvage',hitDebris,hitDebris.id); return; }
     const rp=stationPos(reactor.col,reactor.row);
     if(Math.abs(px-rp.x)<39&&py>rp.y-62&&py<rp.y+24) {
-      planInteraction('reactor',reactor);return;
+      setSelection('reactor', reactor); planInteraction('reactor',reactor);return;
     }
     const tp=stationPos(0,5);
     if(Math.abs(px-tp.x)<25&&py>tp.y-35&&py<tp.y+12) {
-      planInteraction('terminal',{col:0,row:5});return;
+      setSelection('terminal',{col:0,row:5}); planInteraction('terminal',{col:0,row:5});return;
     }
     const tile=selectTile(px,py);
     if(!tile)return;
     const onDebris=debris.find(d=>d.col===tile.col&&d.row===tile.row&&!state.cleared.includes(d.id));
-    if(onDebris){planInteraction('salvage',onDebris,onDebris.id);return;}
-    if(tile.col===reactor.col&&tile.row===reactor.row){planInteraction('reactor',reactor);return;}
-    if(tile.col===0&&tile.row===5){planInteraction('terminal',tile);return;}
-    if(planMove(tile))notify(engineer.path.length?'Moving across the station.':'Engineer is already here.');
+    if(onDebris){setSelection('salvage',onDebris,onDebris.id);planInteraction('salvage',onDebris,onDebris.id);return;}
+    if(tile.col===reactor.col&&tile.row===reactor.row){setSelection('reactor',reactor);planInteraction('reactor',reactor);return;}
+    if(tile.col===0&&tile.row===5){setSelection('terminal',tile);planInteraction('terminal',tile);return;}
+    setSelection('floor',tile);
+    if(planMove(tile))notify(engineer.path.length?'Engineer moving to selected tile.':'Engineer is already here.');
     else notify('That location cannot be reached.');
   }
+  ui.action.addEventListener('click', () => {
+    const {kind, tile, id}=selection;
+    if(kind==='crew') {
+      markerUntil=lastFrame+3000;
+      notify('Engineer located. Look for the cyan beacon and YOU marker.');
+      return;
+    }
+    if(kind==='floor' && tile) {
+      if(planMove(tile)) notify('Moving to selected tile.');
+      else notify('Selected tile is blocked.');
+    }
+    if(kind==='salvage' && tile) planInteraction('salvage',tile,id);
+    if(kind==='reactor') planInteraction('reactor',reactor);
+    if(kind==='terminal') planInteraction('terminal',{col:0,row:5});
+  });
   document.querySelector('#resetButton').addEventListener('click',()=>{
     state=initialState();
     engineer.col=SPAWN.col;engineer.row=SPAWN.row;
     engineer.x=SPAWN.col;engineer.y=SPAWN.row;
     engineer.path=[];engineer.pending=null;engineer.facing=1;
+    setSelection('crew');
     persist();updateUI();notify('New salvage run started.');
   });
   canvas.addEventListener('pointerdown',onPointer);
+  canvas.addEventListener('keydown', e => {
+    const direction = { ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0] }[e.key];
+    if (!direction) return;
+    e.preventDefault();
+    const pos = anchorTile();
+    const next = {col:pos.col + direction[0], row:pos.row + direction[1]};
+    if (passable(next.col,next.row,state)) {
+      setSelection('floor',next);
+      planMove(next);
+    }
+  });
   window.addEventListener('resize',resize);
   resize();updateUI();requestAnimationFrame(render);
 })();
