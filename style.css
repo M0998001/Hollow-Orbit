@@ -1,0 +1,30 @@
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background: #070b18; color: #f3f6ff; }
+* { box-sizing: border-box; }
+html, body { width: 100%; min-height: 100%; margin: 0; }
+body { padding: 16px; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 10%, #1b2a4d 0%, #080d1b 62%, #050712 100%); }
+.game-shell { width: min(1320px, 100%); border: 1px solid #32415e; border-radius: 18px; overflow: hidden; background: #0c1428; box-shadow: 0 30px 100px #0009; }
+.topbar, .bottom-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 22px; }
+.topbar { background: #101b31; border-bottom: 1px solid #253652; }
+.brand { display: flex; gap: 12px; align-items: center; }
+.brand-icon { color: #70f5df; font-size: 30px; }
+h1 { font-size: clamp(17px, 2vw, 23px); letter-spacing: .12em; line-height: 1.1; margin: 3px 0 0; }
+.eyebrow { color: #91a2c3; font-size: 10px; font-weight: 750; letter-spacing: .16em; }
+.version { font-size: 11px; letter-spacing: 0; color: #7edecf; vertical-align: middle; }
+.top-actions { display: flex; align-items: center; gap: 16px; }
+.resource { display: flex; align-items: center; gap: 7px; font-weight: 800; color: #f5d9a1; font-size: 18px; font-variant-numeric: tabular-nums; }
+.resource-icon { font-size: 23px; }
+.resource small { font-size: 9px; letter-spacing: .12em; color: #9eacc5; }
+button { cursor: pointer; color: #d8e5fa; background: #263450; border: 1px solid #405675; border-radius: 9px; padding: 9px 14px; font-weight: 700; }
+button:hover, button:focus-visible { background: #35486b; outline-color: #8cebd9; }
+.viewport { position: relative; width: 100%; aspect-ratio: 1000 / 560; overflow: hidden; background: #060c1d; }
+canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: manipulation; }
+.mission-panel { position: absolute; left: 22px; top: 20px; border: 1px solid #38516d; background: #0a1528df; backdrop-filter: blur(8px); border-radius: 12px; padding: 14px 17px; pointer-events: none; max-width: 250px; }
+.mission-title { margin-top: 7px; font-size: 15px; font-weight: 750; }
+.mission-progress { margin-top: 6px; font-size: 12px; color: #a7b7cd; }
+.hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: #101e33e8; border: 1px solid #34506a; border-radius: 99px; padding: 10px 17px; color: #a4eadd; font-size: 10px; white-space: nowrap; font-weight: 800; letter-spacing: .09em; pointer-events: none; }
+.bottom-bar { min-height: 62px; background: #101b31; border-top: 1px solid #253652; color: #adbed9; font-size: 12px; }
+.bottom-bar > div:first-child { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.status-led { width: 8px; height: 8px; border-radius: 100%; background: #fb786b; box-shadow: 0 0 12px #fb786b88; }
+.status-led.on { background: #76eecb; box-shadow: 0 0 12px #76eecbaa; }
+.message { text-align: right; color: #d2e0f6; }
+@media (max-width: 600px) { body { padding: 0; background: #070b18; } .game-shell { border-radius: 0; border: none; } .topbar, .bottom-bar { padding: 10px 12px; gap: 8px; } .top-actions { gap: 8px; } .resource small { display: none; } .reset-button { padding: 7px 8px; } .viewport { aspect-ratio: 1000 / 650; } .mission-panel { left: 9px; top: 9px; padding: 8px 10px; max-width: 180px; } .mission-title { font-size: 11px; margin-top: 3px; } .mission-progress { font-size: 10px; margin-top: 2px; } .eyebrow { font-size: 8px; } .hint { bottom: 8px; font-size: 8px; padding: 7px 9px; } .bottom-bar { font-size: 10px; flex-direction: column; align-items: flex-start; } .message { text-align: left; } }
