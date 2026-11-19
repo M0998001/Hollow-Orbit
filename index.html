@@ -5,20 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0b1022" />
     <meta name="description" content="Hollow Orbit — restore an abandoned space station." />
-    <title>Hollow Orbit · Prototype 0.1</title>
+    <title>Hollow Orbit · Prototype 0.2</title>
     <link rel="stylesheet" href="style.css" />
     <script src="game.js" defer></script>
   </head>
   <body>
     <main class="game-shell">
       <header class="topbar">
-        <div class="brand"><span class="brand-icon" aria-hidden="true">✦</span><div><span class="eyebrow">STATION RESTORATION PROTOCOL</span><h1>HOLLOW ORBIT <span class="version">0.1</span></h1></div></div>
+        <div class="brand"><span class="brand-icon" aria-hidden="true">✦</span><div><span class="eyebrow">STATION RESTORATION PROTOCOL</span><h1>HOLLOW ORBIT <span class="version">0.2</span></h1></div></div>
         <div class="top-actions"><div class="resource" aria-label="Scrap collected"><span class="resource-icon">⬡</span><span id="scrapCount">0</span><small>SCRAP</small></div><button class="reset-button" id="resetButton" type="button">Restart</button></div>
       </header>
       <section class="viewport" aria-label="Isometric view of an abandoned space station">
-        <canvas id="game" aria-label="Space station game. Tap debris to salvage, then the central reactor to restore power." role="img"></canvas>
+        <canvas id="game" aria-label="Space station game. Tap a floor tile to move your engineer. Tap debris and the reactor to approach and interact." role="img"></canvas>
         <div class="mission-panel"><div class="eyebrow">CURRENT OBJECTIVE</div><div id="objective" class="mission-title">Salvage three debris piles</div><div id="progress" class="mission-progress">0 / 3 debris cleared</div></div>
-        <div class="hint">TAP THE GLOWING DEBRIS TO COLLECT SCRAP</div>
+        <div class="hint">TAP TO WALK · TAP DEBRIS TO SALVAGE</div>
       </section>
       <footer class="bottom-bar"><div><span class="status-led" id="statusLed"></span><span id="stationStatus">Station systems offline</span></div><div class="message" id="message" role="status" aria-live="polite">You have docked with an abandoned station. Begin salvaging.</div></footer>
     </main>
