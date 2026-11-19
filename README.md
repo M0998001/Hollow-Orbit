@@ -2,21 +2,27 @@
 
 A browser-based, isometric space-station restoration game, built in small, playable milestones.
 
-## Milestone 0.1 — Salvage and power
+## Current milestone: 0.2 — Move, salvage, and restore power
 
-The first playable slice includes:
+The playable prototype includes:
+- Tap-to-move engineer controls on desktop, iPhone, and iPad
+- Obstacle-aware shortest-path movement and animated walking
+- Walk-to-interact behavior for debris, reactor, and terminal
 - An isometric view of a damaged space-station deck
 - Three salvageable debris piles, each worth **2 scrap**
 - A reactor repair that costs **6 scrap**
 - Touch and mouse interaction
-- Browser-local save progress and a Restart button
+- Browser-local save progress, including the engineer's position, and a Restart button
+- Compatibility with milestone 0.1 saves
 
 **Play locally:** open `index.html` in your browser, or serve these files with any static web server. No libraries, installs, or build tools are required.
 
 ### How to play
-1. Tap or click the three glowing debris piles to collect 6 scrap.
-2. Tap or click the red central reactor to restore emergency power.
-3. Use **Restart** to play again.
+1. Tap or click an empty floor tile to direct your engineer there.
+2. Tap or click each glowing debris pile. Your engineer walks to it and collects **2 scrap**.
+3. Once you have **6 scrap**, tap the red central reactor. Your engineer walks to it and makes the repair.
+4. Tap the station terminal to inspect it, or explore the deck.
+5. Use **Restart** to reset the game.
 
 ## Publish on GitHub Pages
 
@@ -31,7 +37,7 @@ The URL above is the intended Pages address; it may not work until Pages is enab
 
 | Version | Focus |
 | --- | --- |
-| 0.2 | Engineer movement and mobile-friendly controls |
+| 0.2 | ✅ Engineer movement and mobile-friendly controls |
 | 0.3 | Repairable rooms and station upgrades |
 | 0.4 | Maintenance drone automation |
 | 0.5 | First interactive asteroid expedition |
@@ -45,3 +51,10 @@ The URL above is the intended Pages address; it may not work until Pages is enab
 - `game.js` — simulation, drawing, interactions, and saving
 
 Game progress is saved in the browser's local storage, not in GitHub or across devices. The game is designed for browsers first, with iOS-friendly design decisions throughout.
+
+## Notes for testing
+
+- Test movement by tapping several distant tiles while the engineer is walking; the route should change without teleporting.
+- Uncollected debris, the reactor, and the station terminal block movement; the engineer approaches them from an adjacent tile to interact.
+- Reload after moving to confirm the engineer reappears at the last completed tile.
+- Progress is local to the browser/device and can be reset using **Restart**.
